@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Database } from './utils/database';
 import { Produto } from './types';
+import { isSupabaseConfigured } from './utils/supabaseClient';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import NfeParser from './components/NfeParser';
@@ -24,6 +25,10 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showShortcutTip, setShowShortcutTip] = useState(true);
 
+  // Vercel Standby Mode states
+  const [showVercelStandbyModal, setShowVercelStandbyModal] = useState(false);
+  const [bypassVercelCheck, setBypassVercelCheck] = useState(false);
+
   // Helper to force data reload in all components
   const triggerRefresh = () => {
     setRefreshTrigger(prev => prev + 1);
@@ -36,6 +41,20 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // 1.1 Register Database Write Filter for Vercel Standby Mode
+  useEffect(() => {
+    Database.registerWriteFilter(() => {
+      if (!isSupabaseConfigured() && !bypassVercelCheck) {
+        setShowVercelStandbyModal(true);
+        return false;
+      }
+      return true;
+    });
+    return () => {
+      Database.registerWriteFilter(() => true);
+    };
+  }, [bypassVercelCheck]);
 
   // 2. Keyboard Shortcuts listener (Alt + key) for Power Operators
   useEffect(() => {
@@ -269,6 +288,31 @@ export default function App() {
 
         {/* Workspace Body */}
         <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-6">
+          {/* Vercel Standby Mode Banner */}
+          {!isSupabaseConfigured() && (
+            <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-xl flex items-start gap-3 shadow-sm text-xs">
+              <Activity className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+              <div className="flex-1">
+                <h3 className="font-bold text-amber-800 flex items-center gap-1.5">
+                  Modo de Espera Seguro Vercel Ativo
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-850 font-bold text-[9px] rounded-full">SANDBOX LOCAL</span>
+                </h3>
+                <p className="text-amber-750 mt-1 leading-normal font-medium">
+                  Para habilitar a sincronização PostgreSQL permanente em produção na Vercel, preencha as variáveis de ambiente globais <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold text-amber-900">SUPABASE_URL</code> e <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold text-amber-900">SUPABASE_ANON_KEY</code> no seu painel.
+                </p>
+                {bypassVercelCheck ? (
+                  <span className="inline-block mt-2 font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-100">
+                    ✓ Desvio temporário ativo: Escrevendo no simulador local.
+                  </span>
+                ) : (
+                  <span className="inline-block mt-2 font-bold text-amber-700 bg-amber-100/50 px-2.5 py-0.5 rounded-lg border border-amber-100">
+                    ⚠️ Operações de escrita estão protegidas/bloqueadas por segurança.
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Keyboard Shortcuts Helper Bar */}
           {showShortcutTip && (
             <div className="hidden lg:flex items-center justify-between bg-emerald-950 text-emerald-250 px-4 py-3 rounded-2xl border border-emerald-900/60 shadow-sm animate-fade-in text-xs">
@@ -337,6 +381,78 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* VERCEL SECURE STANDBY MODAL / SCREEN */}
+      {showVercelStandbyModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-100 max-w-xl w-full p-8 shadow-2xl relative overflow-hidden">
+            {/* Decorative colored top bar */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-500 to-rose-500"></div>
+            
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 border border-amber-100 shrink-0">
+                <Activity className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <span className="text-[10px] text-amber-600 font-bold tracking-wider block uppercase font-mono">Modo de Espera Seguro</span>
+                <h2 className="text-xl font-black text-slate-800">Conexão Supabase Pendente</h2>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+              <p>
+                O Controle de Estoque Interativo (CEI) está configurado para ler obrigatoriamente as chaves de comunicação de produção a partir do painel de controle da <strong>Vercel</strong>.
+              </p>
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100/80 font-medium text-slate-700 flex items-start gap-2.5">
+                <span className="text-rose-500 font-bold shrink-0 mt-0.5">⚠️</span>
+                <span>A operação que você tentou realizar exige um estado persistente ativo ou autorização de infraestrutura.</span>
+              </div>
+
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
+                <h3 className="font-bold text-slate-700 text-xs uppercase tracking-wider">Como resolver no Painel da Vercel:</h3>
+                <ol className="list-decimal list-inside space-y-2 text-xs font-medium text-slate-600">
+                  <li>Acesse o seu projeto no dashboard da <strong className="text-slate-800">Vercel</strong>.</li>
+                  <li>Vá em <strong className="text-slate-800">Settings &gt; Environment Variables</strong>.</li>
+                  <li>Adicione as seguintes variáveis de ambiente globais:
+                    <div className="mt-2 space-y-1.5 font-mono text-[11px]">
+                      <div className="flex items-center gap-2 bg-slate-100 px-2.5 py-1 rounded-lg border">
+                        <span className="text-slate-400">Var:</span>
+                        <strong className="text-slate-800">SUPABASE_URL</strong>
+                        <span className="ml-auto text-rose-500 font-bold">Ausente ❌</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-slate-100 px-2.5 py-1 rounded-lg border">
+                        <span className="text-slate-400">Var:</span>
+                        <strong className="text-slate-800">SUPABASE_ANON_KEY</strong>
+                        <span className="ml-auto text-rose-500 font-bold">Ausente ❌</span>
+                      </div>
+                    </div>
+                  </li>
+                  <li>Salve as variáveis e execute um novo <strong className="text-slate-800">Redeploy</strong> na Vercel.</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-5 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  setBypassVercelCheck(true);
+                  setShowVercelStandbyModal(false);
+                  Database.addLog('SUCCESS', 'Operador ativou desvio temporário para Sandbox Local (localStorage).');
+                }}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition cursor-pointer text-center"
+              >
+                Usar Sandbox Local
+              </button>
+              <button
+                onClick={() => setShowVercelStandbyModal(false)}
+                className="w-full sm:flex-1 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl text-xs transition cursor-pointer text-center"
+              >
+                Voltar para Consulta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

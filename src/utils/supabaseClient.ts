@@ -4,8 +4,12 @@ import { Database as LocalDb } from './database';
 let supabaseInstance: SupabaseClient | null = null;
 
 export function getSupabaseKeys() {
-  const url = (import.meta as any).env?.VITE_SUPABASE_URL || localStorage.getItem('supa_url') || '';
-  const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || localStorage.getItem('supa_key') || '';
+  const processEnvUrl = (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : '') || '';
+  const processEnvKey = (typeof process !== 'undefined' ? process.env?.SUPABASE_ANON_KEY : '') || '';
+
+  const url = processEnvUrl || (import.meta as any).env?.VITE_SUPABASE_URL || '';
+  const key = processEnvKey || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+
   return { url: url.trim(), key: key.trim() };
 }
 

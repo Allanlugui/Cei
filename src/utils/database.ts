@@ -16,132 +16,26 @@ export interface DbLog {
 }
 
 // Initial mockup data to populate the DB on first start
-const INITIAL_PRODUTOS: Produto[] = [
-  {
-    id: 'p1',
-    sku: 'TEC-MXK-01',
-    nome: 'Teclado Mecânico Logitech MX Keys Mini',
-    descricao: 'Teclado premium sem fio retroiluminado e ergonômico',
-    categoria: 'Periféricos',
-    preco_custo: 395.00,
-    preco_venda: 699.90,
-    estoque_minimo: 10,
-    estoque_atual: 15,
-    localizacao_estoque: 'Corredor A, Prateleira 4',
-  },
-  {
-    id: 'p2',
-    sku: 'MOU-MXM-03',
-    nome: 'Mouse Ergonômico Logitech MX Master 3S',
-    descricao: 'Mouse sem fio de alta precisão com rolagem MagSpeed',
-    categoria: 'Periféricos',
-    preco_custo: 480.00,
-    preco_venda: 849.90,
-    estoque_minimo: 8,
-    estoque_atual: 5, // Abaixo do estoque mínimo!
-    localizacao_estoque: 'Corredor A, Prateleira 2',
-  },
-  {
-    id: 'p3',
-    sku: 'SSD-NVM-1TB',
-    nome: 'SSD Kingston NV2 1TB NVMe M.2 2280',
-    descricao: 'SSD de alto desempenho PCIe 4.0 NVMe com velocidades de até 3500MB/s',
-    categoria: 'Armazenamento',
-    preco_custo: 260.00,
-    preco_venda: 450.00,
-    estoque_minimo: 30,
-    estoque_atual: 45,
-    localizacao_estoque: 'Corredor B, Gaveta 3',
-  },
-  {
-    id: 'p4',
-    sku: 'MEM-DDR-16G',
-    nome: 'Memória RAM Corsair Vengeance LPX 16GB',
-    descricao: 'Módulo de memória de alto desempenho DDR4 3200MHz',
-    categoria: 'Componentes',
-    preco_custo: 175.00,
-    preco_venda: 299.00,
-    estoque_minimo: 25,
-    estoque_atual: 8, // Abaixo do estoque mínimo!
-    localizacao_estoque: 'Corredor B, Gaveta 1',
-  },
-];
+const INITIAL_PRODUTOS: Produto[] = [];
 
-const INITIAL_FORNECEDORES: Fornecedor[] = [
-  {
-    id: 'f1',
-    cnpj: '11.222.333/0001-44',
-    nome_fantasia: 'Logitech BR',
-    razao_social: 'Logitech Equipamentos do Brasil Ltda',
-    email: 'comercial@logitech.com.br',
-    telefone: '(11) 3003-1122',
-  },
-  {
-    id: 'f2',
-    cnpj: '99.888.777/0001-00',
-    nome_fantasia: 'TecnoMax Componentes',
-    razao_social: 'Distribuidora de Componentes TecnoMax S/A',
-    email: 'faturamento@tecnomax.com',
-    telefone: '(21) 2555-9876',
-  },
-];
+const INITIAL_FORNECEDORES: Fornecedor[] = [];
 
-const INITIAL_MOVIMENTACOES: Movimentacao[] = [
-  {
-    id: 'm1',
-    produto_id: 'p1',
-    tipo: 'Entrada',
-    quantidade: 15,
-    data_movimentacao: new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString(),
-    usuario_id: 'usr_felipe_estoque',
-    motivo: 'Compra NF',
-    observacao: 'Carga inicial para implantação',
-  },
-  {
-    id: 'm2',
-    produto_id: 'p2',
-    tipo: 'Entrada',
-    quantidade: 10,
-    data_movimentacao: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString(),
-    usuario_id: 'usr_felipe_estoque',
-    motivo: 'Compra NF',
-    observacao: 'Entrada inicial',
-  },
-  {
-    id: 'm3',
-    produto_id: 'p2',
-    tipo: 'Saída',
-    quantidade: 5,
-    data_movimentacao: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString(),
-    usuario_id: 'usr_gabriela_vendas',
-    motivo: 'Venda',
-    observacao: 'Pedido #8540',
-  },
-  {
-    id: 'm4',
-    produto_id: 'p3',
-    tipo: 'Entrada',
-    quantidade: 45,
-    data_movimentacao: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-    usuario_id: 'usr_felipe_estoque',
-    motivo: 'Compra NF',
-    observacao: 'Recebimento NF-e #125',
-  },
-  {
-    id: 'm5',
-    produto_id: 'p4',
-    tipo: 'Entrada',
-    quantidade: 8,
-    data_movimentacao: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
-    usuario_id: 'usr_felipe_estoque',
-    motivo: 'Ajuste Manual',
-    observacao: 'Correção de contagem física',
-  },
-];
+const INITIAL_MOVIMENTACOES: Movimentacao[] = [];
 
 export class Database {
   // Subscriber mechanism for instant Realtime Updates across components
   private static subscribers: Set<() => void> = new Set();
+  private static writeFilter: (() => boolean) | null = null;
+
+  static registerWriteFilter(callback: () => boolean) {
+    this.writeFilter = callback;
+  }
+
+  private static checkWrite(): void {
+    if (this.writeFilter && !this.writeFilter()) {
+      throw new Error('VERCEL_STANDBY_MODE');
+    }
+  }
 
   static subscribe(callback: () => void): () => void {
     this.subscribers.add(callback);
@@ -213,6 +107,7 @@ export class Database {
   }
 
   static saveProduto(p: Omit<Produto, 'id'> & { id?: string }): Produto {
+    this.checkWrite();
     const produtos = this.getProdutos();
     
     // Check unique SKU
@@ -270,6 +165,7 @@ export class Database {
   }
 
   static deleteProduto(id: string): void {
+    this.checkWrite();
     const produtos = this.getProdutos();
     const prod = produtos.find(p => p.id === id);
     if (!prod) throw new Error('Produto não encontrado');
@@ -286,6 +182,7 @@ export class Database {
   }
 
   static saveFornecedor(f: Omit<Fornecedor, 'id'> & { id?: string }): Fornecedor {
+    this.checkWrite();
     const fornecedores = this.getFornecedores();
 
     // Clean CNPJ before comparison
@@ -342,6 +239,7 @@ export class Database {
   }
 
   static addMovimentacao(m: Omit<Movimentacao, 'id' | 'data_movimentacao'>): Movimentacao {
+    this.checkWrite();
     const produtos = this.getProdutos();
     const prodIndex = produtos.findIndex(p => p.id === m.produto_id);
 
@@ -428,6 +326,7 @@ export class Database {
     itens: Array<{ sku: string; nome: string; unidade: string; quantidade: number; precoCusto: number; valorTotal: number }>;
     xmlString: string;
   }): { nota: NotaFiscal; totalItensProcessados: number; totalNovosProdutos: number } {
+    this.checkWrite();
     
     // Check if invoice already registered to prevent duplicates
     const notas = this.getNotasFiscais();
