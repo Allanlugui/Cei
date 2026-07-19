@@ -1,5 +1,26 @@
 import { Produto, Fornecedor, Movimentacao, NotaFiscal } from '../types';
 
+export function isUUID(str: string): boolean {
+  const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return regex.test(str);
+}
+
+export function generateUUID(): string {
+  let d = new Date().getTime();
+  let d2 = ((typeof performance !== 'undefined') && performance.now && (performance.now() * 1000)) || 0;
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    let r = Math.random() * 16;
+    if (d > 0) {
+      r = (d + r) % 16 | 0;
+      d = Math.floor(d / 16);
+    } else {
+      r = (d2 + r) % 16 | 0;
+      d2 = Math.floor(d2 / 16);
+    }
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
 // Local storage keys
 const KEY_PRODUTOS = 'cei_produtos';
 const KEY_MOVIMENTACOES = 'cei_movimentacoes';
@@ -101,6 +122,82 @@ export class Database {
     this.addLog('SUCCESS', 'Logs de banco limpos pelo operador.');
   }
 
+  static migrateToUUIDs(): void {
+    const keyProdutos = 'cei_produtos';
+    const keyFornecedores = 'cei_fornecedores';
+    const keyMovimentacoes = 'cei_movimentacoes';
+    const keyNotasFiscais = 'cei_notas_fiscais';
+
+    let produtos = this.getStored<any>(keyProdutos, []);
+    let fornecedores = this.getStored<any>(keyFornecedores, []);
+    let movimentacoes = this.getStored<any>(keyMovimentacoes, []);
+    let notasFiscais = this.getStored<any>(keyNotasFiscais, []);
+
+    let changesMade = false;
+
+    // 1. Map old product IDs to new UUIDs
+    const prodIdMap = new Map<string, string>();
+    produtos = produtos.map(p => {
+      if (!isUUID(p.id)) {
+        const newId = generateUUID();
+        prodIdMap.set(p.id, newId);
+        changesMade = true;
+        return { ...p, id: newId, sincronizado: false };
+      }
+      return p;
+    });
+
+    // 2. Map old supplier IDs to new UUIDs
+    const fornIdMap = new Map<string, string>();
+    fornecedores = fornecedores.map(f => {
+      if (!isUUID(f.id)) {
+        const newId = generateUUID();
+        fornIdMap.set(f.id, newId);
+        changesMade = true;
+        return { ...f, id: newId, sincronizado: false };
+      }
+      return f;
+    });
+
+    // 3. Update product references in movimentacoes, and ensure movimentacao IDs are UUIDs
+    movimentacoes = movimentacoes.map(m => {
+      let updated = { ...m };
+      if (prodIdMap.has(m.produto_id)) {
+        updated.produto_id = prodIdMap.get(m.produto_id)!;
+        changesMade = true;
+      }
+      if (!isUUID(m.id)) {
+        updated.id = generateUUID();
+        updated.sincronizado = false;
+        changesMade = true;
+      }
+      return updated;
+    });
+
+    // 4. Update supplier references in notas_fiscais, and ensure integrity
+    notasFiscais = notasFiscais.map(n => {
+      let updated = { ...n };
+      if (fornIdMap.has(n.fornecedor_id)) {
+        updated.fornecedor_id = fornIdMap.get(n.fornecedor_id)!;
+        changesMade = true;
+      }
+      if (!isUUID(n.id)) {
+        updated.id = generateUUID();
+        updated.sincronizado = false;
+        changesMade = true;
+      }
+      return updated;
+    });
+
+    if (changesMade) {
+      this.setStored(keyProdutos, produtos);
+      this.setStored(keyFornecedores, fornecedores);
+      this.setStored(keyMovimentacoes, movimentacoes);
+      this.setStored(keyNotasFiscais, notasFiscais);
+      this.addLog('SUCCESS', 'Migração de banco local para IDs UUID realizada com sucesso para compatibilidade com o Supabase.');
+    }
+  }
+
   // --- PRODUTOS ---
   static getProdutos(): Produto[] {
     return this.getStored<Produto>(KEY_PRODUTOS, INITIAL_PRODUTOS);
@@ -137,7 +234,11 @@ export class Database {
       // RUN THE STRICT NON-NEGATIVE TRIGGER CHECK
       if (newVal.estoque_atual < 0) {
         const errorMsg = `PG_EXCEPTION: tg_garantir_estoque_nao_negativo FAILED. Saldo de estoque insuficiente para o produto "${newVal.nome}" (SKU: ${newVal.sku}). Estoque atual: ${oldVal.estoque_atual}, Saída deixaria saldo em ${newVal.estoque_atual}.`;
-        this.addLog('ERROR', errorMsg, `Attempted value: ${newVal.estoque_atual}`);
+        if (newVal.categoria !== 'Auditoria') {
+          this.addLog('ERROR', errorMsg, `Attempted value: ${newVal.estoque_atual}`);
+        } else {
+          this.addLog('TRIGGER', `[Auditoria] Trava testada com sucesso: ${errorMsg}`);
+        }
         throw new Error(errorMsg);
       }
 
@@ -151,7 +252,7 @@ export class Database {
       const now = new Date().toISOString();
       const newVal: Produto = {
         ...p,
-        id: 'p_' + Math.random().toString(36).substr(2, 9),
+        id: generateUUID(),
         estoque_atual: p.estoque_atual || 0,
         created_at: now,
         updated_at: now,
@@ -229,7 +330,7 @@ export class Database {
       const now = new Date().toISOString();
       const inserted: Fornecedor = {
         ...f,
-        id: 'f_' + Math.random().toString(36).substr(2, 9),
+        id: generateUUID(),
         created_at: now,
         updated_at: now,
         sincronizado: false,
@@ -299,7 +400,7 @@ export class Database {
     const movs = this.getStored<Movimentacao>(KEY_MOVIMENTACOES, INITIAL_MOVIMENTACOES);
     const newMov: Movimentacao = {
       ...m,
-      id: 'm_' + Math.random().toString(36).substr(2, 9),
+      id: generateUUID(),
       data_movimentacao: now,
       created_at: now,
       updated_at: now,
@@ -384,7 +485,7 @@ export class Database {
     // 2. Register Nota Fiscal
     const now = new Date().toISOString();
     const novaNota: NotaFiscal = {
-      id: 'nf_' + Math.random().toString(36).substr(2, 9),
+      id: generateUUID(),
       chave_nfe: parsed.chaveNfe,
       numero_nf: parsed.numeroNf,
       serie: parsed.serie,
@@ -413,7 +514,7 @@ export class Database {
         // Product doesn't exist, register a new one automatically!
         const itemNow = new Date().toISOString();
         prod = {
-          id: 'p_' + Math.random().toString(36).substr(2, 9),
+          id: generateUUID(),
           sku: item.sku,
           nome: item.nome,
           descricao: `Cadastrado automaticamente via NF-e #${parsed.numeroNf}`,
@@ -536,7 +637,7 @@ export class Database {
     let cmpMsg = '';
     let writeMsg = '';
 
-    const testProdId = 'temp_audit_' + Math.random().toString(36).substr(2, 9);
+    const testProdId = generateUUID();
     const testSku = 'AUDIT-' + Math.random().toString(36).substr(2, 5).toUpperCase();
 
     try {
@@ -675,3 +776,7 @@ export class Database {
     };
   }
 }
+
+// Execute migration on file load for UUID compatibility
+Database.migrateToUUIDs();
+

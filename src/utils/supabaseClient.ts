@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Database as LocalDb } from './database';
+import { Database as LocalDb, isUUID } from './database';
 
 let supabaseInstance: SupabaseClient | null = null;
 
@@ -58,7 +58,7 @@ export const SupabaseSync = {
       const { data, error } = await supabase
         .from('produtos')
         .upsert({
-          id: produto.id.startsWith('p_') ? undefined : produto.id, // let Supabase generate UUID or match
+          id: isUUID(produto.id) ? produto.id : undefined, // let Supabase generate UUID or match
           sku: produto.sku,
           nome: produto.nome,
           descricao: produto.descricao,
