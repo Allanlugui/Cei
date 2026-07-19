@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Estoque Interativo",
+  "description": "Sistema interativo de controle de estoque com suporte a parsing de NF-e (XML), movimentações, alertas e integração conceitual/direta com Supabase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
