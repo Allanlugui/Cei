@@ -10,6 +10,8 @@ export interface Produto {
   estoque_atual: number;
   localizacao_estoque: string; // Ex: Prateleira A-4, Corredor 2
   created_at?: string;
+  updated_at?: string;
+  sincronizado?: boolean;
 }
 
 export type TipoMovimentacao = 'Entrada' | 'Saída' | 'Ajuste de Inventário';
@@ -23,6 +25,9 @@ export interface Movimentacao {
   usuario_id: string;
   motivo: 'Venda' | 'Quebra' | 'Compra NF' | 'Balanço' | 'Ajuste Manual' | string;
   observacao?: string;
+  created_at?: string;
+  updated_at?: string;
+  sincronizado?: boolean;
   // Join fields for visual purposes
   produto_nome?: string;
   produto_sku?: string;
@@ -36,6 +41,8 @@ export interface Fornecedor {
   email: string;
   telefone: string;
   created_at?: string;
+  updated_at?: string;
+  sincronizado?: boolean;
 }
 
 export interface NotaFiscal {
@@ -48,6 +55,8 @@ export interface NotaFiscal {
   valor_total: number;
   xml_armazenado: string;
   created_at?: string;
+  updated_at?: string;
+  sincronizado?: boolean;
   // Join fields
   fornecedor_nome?: string;
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Database } from './utils/database';
 import { Produto } from './types';
-import { isSupabaseConfigured } from './utils/supabaseClient';
+import { isSupabaseConfigured, SupabaseSync } from './utils/supabaseClient';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import NfeParser from './components/NfeParser';
@@ -28,6 +28,36 @@ export default function App() {
   // Vercel Standby Mode states
   const [showVercelStandbyModal, setShowVercelStandbyModal] = useState(false);
   const [bypassVercelCheck, setBypassVercelCheck] = useState(false);
+
+  // Synchronization states
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+  // Auto-update pending sync count whenever data changes
+  useEffect(() => {
+    setPendingSyncCount(SupabaseSync.getPendingSyncCount());
+  }, [refreshTrigger]);
+
+  // Execute Bidirectional Synchronization
+  const handleSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const res = await SupabaseSync.performBidirectionalSync();
+      if (res.success) {
+        triggerRefresh();
+        Database.addLog('SUCCESS', `Sincronização bidirecional realizada com sucesso! Uploads: ${res.uploadedCount}, Downloads: ${res.downloadedCount}.`);
+      } else {
+        Database.addLog('ERROR', `Falha de sincronização: ${res.error || 'Erro de rede ou permissão'}`);
+        alert(`Erro na Sincronização: ${res.error || 'Verifique as configurações do Supabase'}`);
+      }
+    } catch (err: any) {
+      Database.addLog('ERROR', 'Erro ao sincronizar com Supabase', err?.message || String(err));
+      alert(`Falha ao sincronizar: ${err?.message || String(err)}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Helper to force data reload in all components
   const triggerRefresh = () => {
@@ -276,6 +306,38 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4 text-xs">
+            {/* Dynamic Bidirectional Sync Button */}
+            <button
+              onClick={handleSync}
+              disabled={isSyncing}
+              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition duration-200 cursor-pointer ${
+                isSyncing
+                  ? 'bg-amber-50 text-amber-600 border border-amber-200 shadow-sm animate-pulse'
+                  : pendingSyncCount > 0
+                    ? 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 shadow-sm animate-pulse'
+                    : 'bg-emerald-50 text-emerald-600 border border-emerald-150 hover:bg-emerald-100 shadow-sm'
+              }`}
+              title={
+                isSyncing
+                  ? "Sincronizando..."
+                  : pendingSyncCount > 0
+                    ? `${pendingSyncCount} alterações locais pendentes`
+                    : "Sincronizado"
+              }
+            >
+              <RefreshCcw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden md:inline uppercase tracking-wide">
+                {isSyncing
+                  ? 'Sincronizando...'
+                  : pendingSyncCount > 0
+                    ? `${pendingSyncCount} alterações locais pendentes`
+                    : 'Sincronizado'}
+              </span>
+              <span className="md:hidden font-bold">
+                {isSyncing ? 'Sinc...' : pendingSyncCount > 0 ? `${pendingSyncCount} Pend.` : 'Sincronizado'}
+              </span>
+            </button>
+
             <div className="text-right hidden sm:block">
               <span className="font-semibold text-slate-700 block">Operador Central</span>
               <span className="text-slate-400 text-[10px]">usr_estoquista_principal</span>

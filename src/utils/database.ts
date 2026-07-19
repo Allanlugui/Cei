@@ -124,10 +124,14 @@ export class Database {
       if (index === -1) throw new Error('Produto não encontrado');
       
       const oldVal = produtos[index];
+      const now = new Date().toISOString();
       const newVal: Produto = {
         ...oldVal,
         ...p,
         id: p.id,
+        created_at: oldVal.created_at || now,
+        updated_at: now,
+        sincronizado: false,
       };
 
       // RUN THE STRICT NON-NEGATIVE TRIGGER CHECK
@@ -144,10 +148,14 @@ export class Database {
       return newVal;
     } else {
       // INSERT
+      const now = new Date().toISOString();
       const newVal: Produto = {
         ...p,
         id: 'p_' + Math.random().toString(36).substr(2, 9),
         estoque_atual: p.estoque_atual || 0,
+        created_at: now,
+        updated_at: now,
+        sincronizado: false,
       };
 
       if (newVal.estoque_atual < 0) {
@@ -203,16 +211,28 @@ export class Database {
       const index = fornecedores.findIndex(forn => forn.id === f.id);
       if (index === -1) throw new Error('Fornecedor não encontrado');
 
-      const updated: Fornecedor = { ...fornecedores[index], ...f, id: f.id };
+      const now = new Date().toISOString();
+      const updated: Fornecedor = {
+        ...fornecedores[index],
+        ...f,
+        id: f.id,
+        created_at: fornecedores[index].created_at || now,
+        updated_at: now,
+        sincronizado: false,
+      };
       fornecedores[index] = updated;
       this.setStored(KEY_FORNECEDORES, fornecedores);
       this.addLog('SUCCESS', `Fornecedor "${updated.nome_fantasia}" atualizado.`);
       Database.notifySubscribers();
       return updated;
     } else {
+      const now = new Date().toISOString();
       const inserted: Fornecedor = {
         ...f,
         id: 'f_' + Math.random().toString(36).substr(2, 9),
+        created_at: now,
+        updated_at: now,
+        sincronizado: false,
       };
       fornecedores.push(inserted);
       this.setStored(KEY_FORNECEDORES, fornecedores);
@@ -268,7 +288,10 @@ export class Database {
     }
 
     // UPDATE PRODUCT STOCK (Simulating the database AFTER INSERT trigger)
+    const now = new Date().toISOString();
     prod.estoque_atual = novoEstoque;
+    prod.updated_at = now;
+    prod.sincronizado = false;
     produtos[prodIndex] = prod;
     this.setStored(KEY_PRODUTOS, produtos);
 
@@ -277,7 +300,10 @@ export class Database {
     const newMov: Movimentacao = {
       ...m,
       id: 'm_' + Math.random().toString(36).substr(2, 9),
-      data_movimentacao: new Date().toISOString(),
+      data_movimentacao: now,
+      created_at: now,
+      updated_at: now,
+      sincronizado: false,
     };
     movs.unshift(newMov); // newest first
     this.setStored(KEY_MOVIMENTACOES, movs);
@@ -356,6 +382,7 @@ export class Database {
     }
 
     // 2. Register Nota Fiscal
+    const now = new Date().toISOString();
     const novaNota: NotaFiscal = {
       id: 'nf_' + Math.random().toString(36).substr(2, 9),
       chave_nfe: parsed.chaveNfe,
@@ -365,7 +392,9 @@ export class Database {
       fornecedor_id: targetFornecedor.id,
       valor_total: parsed.valorTotal,
       xml_armazenado: parsed.xmlString,
-      created_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
+      sincronizado: false,
     };
 
     const storedNfs = this.getStored<NotaFiscal>(KEY_NOTAS_FISCAIS, []);
@@ -382,6 +411,7 @@ export class Database {
 
       if (prodIndex === -1) {
         // Product doesn't exist, register a new one automatically!
+        const itemNow = new Date().toISOString();
         prod = {
           id: 'p_' + Math.random().toString(36).substr(2, 9),
           sku: item.sku,
@@ -393,6 +423,9 @@ export class Database {
           estoque_minimo: 5,
           estoque_atual: 0, // Starts at 0, the movement trigger will add the quantity
           localizacao_estoque: 'Área de Triagem / Entrada',
+          created_at: itemNow,
+          updated_at: itemNow,
+          sincronizado: false,
         };
         produtos.push(prod);
         prodIndex = produtos.length - 1;
@@ -441,6 +474,26 @@ export class Database {
       totalItensProcessados: parsed.itens.length,
       totalNovosProdutos,
     };
+  }
+
+  static setProdutosRaw(produtos: Produto[]): void {
+    this.setStored(KEY_PRODUTOS, produtos);
+    Database.notifySubscribers();
+  }
+
+  static setFornecedoresRaw(forns: Fornecedor[]): void {
+    this.setStored(KEY_FORNECEDORES, forns);
+    Database.notifySubscribers();
+  }
+
+  static setMovimentacoesRaw(movs: Movimentacao[]): void {
+    this.setStored(KEY_MOVIMENTACOES, movs);
+    Database.notifySubscribers();
+  }
+
+  static setNotasFiscaisRaw(notas: NotaFiscal[]): void {
+    this.setStored(KEY_NOTAS_FISCAIS, notas);
+    Database.notifySubscribers();
   }
 
   // Clear Database entirely to default values (for testing convenience)
